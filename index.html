@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>GlobalPaste | বিশ্বব্যাপী কোড শেয়ারিং</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 20% 30%, #0a0c12, #030507);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            color: #eef2ff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* গ্লাসমরফিজম */
+        .glass-card {
+            background: rgba(18, 25, 40, 0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            padding: 28px;
+            margin-bottom: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(135deg, #a855f7, #3b82f6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 20px;
+            color: #c4e0ff;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            margin-bottom: 16px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            background: rgba(10, 14, 23, 0.9);
+            border: 1px solid #2d3a5e;
+            border-radius: 20px;
+            padding: 14px 18px;
+            color: #f1f5f9;
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            outline: none;
+            margin-bottom: 16px;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+
+        textarea {
+            min-height: 300px;
+            resize: vertical;
+            font-family: 'Fira Code', monospace;
+            line-height: 1.5;
+        }
+
+        button {
+            background: linear-gradient(95deg, #2563eb, #7c3aed);
+            border: none;
+            padding: 12px 28px;
+            border-radius: 40px;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.2s;
+            font-size: 1rem;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        button:hover {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+
+        /* পেস্ট কার্ড */
+        .paste-card {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 20px;
+            padding: 18px;
+            margin-bottom: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .paste-card:hover {
+            transform: translateX(8px);
+            background: rgba(59, 130, 246, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .paste-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 8px;
+        }
+
+        .paste-preview {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            font-family: 'Fira Code', monospace;
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+
+        .paste-meta {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* সার্চ বক্স */
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        /* টোস্ট মেসেজ */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293bdd;
+            backdrop-filter: blur(20px);
+            padding: 12px 28px;
+            border-radius: 50px;
+            color: white;
+            z-index: 1000;
+            border: 1px solid #3b82f6;
+            font-weight: 500;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        /* লোডিং */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.7;
+        }
+
+        /* মোডাল ভিউ - উন্নত */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(12px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: #0d1117;
+            border-radius: 28px;
+            max-width: 1000px;
+            width: 100%;
+            max-height: 88vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #3b82f6;
+            box-shadow: 0 25px 50px -12px black;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid #2d3a5e;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .modal-header h3 {
+            color: #60a5fa;
+            font-size: 1.3rem;
+        }
+
+        .modal-language {
+            background: #1e293b;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-family: monospace;
+        }
+
+        .close-modal {
+            background: none;
+            font-size: 28px;
+            padding: 0 12px;
+            box-shadow: none;
+        }
+
+        .close-modal:hover {
+            box-shadow: none;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .code-scroll {
+            overflow: auto;
+            padding: 24px;
+            flex: 1;
+            max-height: 60vh;
+        }
+
+        pre {
+            background: #010409;
+            padding: 20px;
+            border-radius: 16px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+            color: #e2e8f0;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 14px;
+            padding: 18px 24px;
+            border-top: 1px solid #2d3a5e;
+            background: rgba(0,0,0,0.3);
+            flex-wrap: wrap;
+        }
+
+        .btn-copy {
+            background: linear-gradient(95deg, #059669, #10b981);
+        }
+
+        .btn-download {
+            background: linear-gradient(95deg, #7c3aed, #a855f7);
+        }
+
+        @media (max-width: 700px) {
+            body { padding: 12px; }
+            .glass-card { padding: 18px; }
+            .modal-header { padding: 16px; }
+            .code-scroll { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- হেডার -->
+    <div class="glass-card">
+        <h1>🌍 GlobalPaste</h1>
+        <p class="subtitle">সারা বিশ্বের ডেভেলপাররা যা পোস্ট করে, সবাই দেখতে পায় | ১০০০+ লাইন কোড সাপোর্ট | কপি + ডাউনলোড</p>
+    </div>
+
+    <!-- ক্রিয়েট ফর্ম -->
+    <div class="glass-card">
+        <h2>📝 নতুন পেস্ট তৈরি করুন</h2>
+        <input type="text" id="pasteTitle" placeholder="টাইটেল (যেমন: Awesome Algorithm.js)" autocomplete="off">
+        <select id="langSelect">
+            <option value="javascript">JavaScript</option>
+            <option value="python">Python</option>
+            <option value="html">HTML</option>
+            <option value="css">CSS</option>
+            <option value="json">JSON</option>
+            <option value="bash">Bash</option>
+            <option value="plain">Plain Text</option>
+        </select>
+        <textarea id="codeInput" placeholder="আপনার কোড এখানে লিখুন... (সাপোর্ট ১০০০০+ লাইন)"></textarea>
+        <button id="publishBtn">🚀 পাবলিশ করুন - সারা বিশ্ব দেখবে</button>
+    </div>
+
+    <!-- সব পেস্ট দেখানো -->
+    <div class="glass-card">
+        <h2>🔥 গ্লোবাল ফিড (রিয়েল-টাইম)</h2>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 টাইটেল বা কোড অনুসন্ধান করুন...">
+        </div>
+        <div id="pastesListContainer">
+            <div class="loading">⏳ লোড হচ্ছে...</div>
+        </div>
+    </div>
+</div>
+
+<!-- মোডাল ভিউয়ার - উন্নত ভার্সন -->
+<div id="codeModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div>
+                <h3 id="modalTitle"></h3>
+                <span id="modalLang" class="modal-language"></span>
+            </div>
+            <button class="close-modal" id="closeModalBtn">✕</button>
+        </div>
+        <div class="code-scroll">
+            <pre id="modalCode"></pre>
+        </div>
+        <div class="modal-actions">
+            <button id="copyModalBtn" class="btn-copy">📋 সম্পূর্ণ কোড কপি করুন</button>
+            <button id="downloadModalBtn" class="btn-download">⬇️ ফাইল হিসেবে ডাউনলোড</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==================== 🔥 এখানে আপনার Firebase Config বসান ====================
+    const firebaseConfig = {
+        apiKey: "AIzaSyAhryuuuJgbMnMTG3rA7rKelDvWFxgk7Ck",
+  authDomain: "filesharing-755c6.firebaseapp.com",  
+  projectId: "filesharing-755c6",
+  storageBucket: "filesharing-755c6.firebasestorage.app",
+  messagingSenderId: "381841390095",
+  appId: "1:381841390095:web:32d002f90dd689c574417a"
+    };
+    
+    // Firebase Initialize
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    
+    // ==================== গ্লোবাল ভেরিয়েবল ====================
+    let currentPasteData = null;  // বর্তমানে মোডালে দেখা পেস্টের ডাটা
+    
+    // ==================== টোস্ট ফাংশন ====================
+    function showToast(message, duration = 2500) {
+        let oldToast = document.querySelector('.toast');
+        if(oldToast) oldToast.remove();
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+    
+    // ==================== পেস্ট পাবলিশ করা ====================
+    document.getElementById('publishBtn').addEventListener('click', async () => {
+        const title = document.getElementById('pasteTitle').value.trim();
+        const language = document.getElementById('langSelect').value;
+        const code = document.getElementById('codeInput').value;
+        
+        if(!code.trim()) {
+            showToast("❌ দয়া করে কিছু কোড লিখুন!", 1500);
+            return;
+        }
+        
+        const finalTitle = title || "Untitled Masterpiece";
+        
+        try {
+            await db.collection("global_pastes").add({
+                title: finalTitle,
+                language: language,
+                code: code,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                views: 0
+            });
+            showToast("✅ পেস্ট পাবলিশ করা হয়েছে! এখন সারা বিশ্ব দেখতে পাবে ✨");
+            document.getElementById('codeInput').value = '';
+            document.getElementById('pasteTitle').value = '';
+        } catch(error) {
+            console.error(error);
+            showToast("❌ পাবলিশ করতে ব্যর্থ: " + error.message);
+        }
+    });
+    
+    // ==================== রিয়েল-টাইমে সব পেস্ট লোড করা ====================
+    let currentSearchTerm = "";
+    
+    function loadAllPastes(searchTerm = "") {
+        let query = db.collection("global_pastes")
+            .orderBy("timestamp", "desc")
+            .limit(100);
+        
+        query.onSnapshot((snapshot) => {
+            const pastes = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const titleMatch = data.title.toLowerCase().includes(searchTerm.toLowerCase());
+                const codeMatch = data.code.toLowerCase().includes(searchTerm.toLowerCase());
+                if(searchTerm && !titleMatch && !codeMatch) {
+                    return;
+                }
+                pastes.push({
+                    id: doc.id,
+                    ...data,
+                    timestamp: data.timestamp?.toDate?.() || new Date()
+                });
+            });
+            
+            renderPastesList(pastes);
+        }, (error) => {
+            console.error("Snapshot error:", error);
+            document.getElementById('pastesListContainer').innerHTML = '<div class="loading">⚠️ ডাটা লোড করতে সমস্যা। ফায়ারবেস কনফিগ চেক করুন।</div>';
+        });
+    }
+    
+    function renderPastesList(pastes) {
+        const container = document.getElementById('pastesListContainer');
+        if(!pastes.length) {
+            container.innerHTML = '<div class="loading">✨ এখনো কোনো পেস্ট নেই। প্রথম পেস্ট আপনিই করুন! 🚀</div>';
+            return;
+        }
+        
+        container.innerHTML = pastes.map(paste => `
+            <div class="paste-card" onclick="openPasteModal('${paste.id}')">
+                <div class="paste-title">📄 ${escapeHtml(paste.title)}</div>
+                <div class="paste-preview">${escapeHtml(paste.code.substring(0, 180))}${paste.code.length > 180 ? '...' : ''}</div>
+                <div class="paste-meta">
+                    <span>🔤 ${paste.language}</span>
+                    <span>👁️ ${paste.views || 0} views</span>
+                    <span>📅 ${formatDate(paste.timestamp)}</span>
+                    <span>📏 ${paste.code.length} অক্ষর</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function escapeHtml(str) {
+        if(!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if(m === '&') return '&amp;';
+            if(m === '<') return '&lt;';
+            if(m === '>') return '&gt;';
+            return m;
+        });
+    }
+    
+    function formatDate(date) {
+        if(!date) return 'এখনই';
+        try {
+            return date.toLocaleString('bn-BD', { hour12: true });
+        } catch(e) {
+            return new Date().toLocaleString();
+        }
+    }
+    
+    // ==================== মোডালে কোড দেখা + কপি/ডাউনলোড ====================
+    window.openPasteModal = async function(pasteId) {
+        try {
+            const doc = await db.collection("global_pastes").doc(pasteId).get();
+            if(!doc.exists) {
+                showToast("পেস্ট খুঁজে পাওয়া যায়নি");
+                return;
+            }
+            const data = doc.data();
+            
+            // পুরো ডাটা স্টোর করে রাখি কপি/ডাউনলোডের জন্য
+            currentPasteData = { 
+                id: pasteId, 
+                title: data.title || "Untitled",
+                language: data.language || "plain",
+                code: data.code || "// কোড খালি",
+                views: data.views || 0
+            };
+            
+            document.getElementById('modalTitle').innerText = currentPasteData.title;
+            document.getElementById('modalLang').innerText = currentPasteData.language;
+            document.getElementById('modalCode').innerText = currentPasteData.code;
+            
+            // ভিউ কাউন্ট আপডেট
+            await db.collection("global_pastes").doc(pasteId).update({
+                views: firebase.firestore.FieldValue.increment(1)
+            });
+            
+            document.getElementById('codeModal').style.display = 'flex';
+        } catch(err) {
+            console.error(err);
+            showToast("কোড লোড করতে সমস্যা");
+        }
+    };
+    
+    // মোডাল ক্লোজ
+    document.getElementById('closeModalBtn').addEventListener('click', () => {
+        document.getElementById('codeModal').style.display = 'none';
+        currentPasteData = null;
+    });
+    
+    window.addEventListener('click', (e) => {
+        if(e.target === document.getElementById('codeModal')) {
+            document.getElementById('codeModal').style.display = 'none';
+            currentPasteData = null;
+        }
+    });
+    
+    // ==================== কপি বাটন - সম্পূর্ণ কোড কপি করবে ====================
+    document.getElementById('copyModalBtn').addEventListener('click', async () => {
+        if(currentPasteData && currentPasteData.code) {
+            try {
+                await navigator.clipboard.writeText(currentPasteData.code);
+                showToast(`📋 ${currentPasteData.code.length} অক্ষরের কোড কপি করা হয়েছে!`);
+            } catch(err) {
+                // ফallback
+                const textarea = document.createElement('textarea');
+                textarea.value = currentPasteData.code;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                showToast(`📋 কোড কপি করা হয়েছে! (${currentPasteData.code.length} অক্ষর)`);
+            }
+        } else {
+            showToast("❌ কপি করার জন্য কোনো কোড নেই");
+        }
+    });
+    
+    // ==================== ডাউনলোড বাটন - TXT ফাইল হিসেবে সেভ ====================
+    document.getElementById('downloadModalBtn').addEventListener('click', () => {
+        if(currentPasteData && currentPasteData.code) {
+            const blob = new Blob([currentPasteData.code], {type: 'text/plain'});
+            const a = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            const filename = `${currentPasteData.title.replace(/[^a-z0-9]/gi, '_')}.${currentPasteData.language === 'plain' ? 'txt' : currentPasteData.language}`;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`⬇️ "${currentPasteData.title}" ডাউনলোড শুরু!`);
+        } else {
+            showToast("❌ ডাউনলোড করার জন্য কোনো কোড নেই");
+        }
+    });
+    
+    // সার্চ ফাংশন
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        currentSearchTerm = e.target.value;
+        loadAllPastes(currentSearchTerm);
+    });
+    
+    // শুরু করা
+    loadAllPastes();
+    showToast("🌍 গ্লোবাল মোড চালু! যেকোনো পেস্টে ক্লিক করে কোড দেখুন ও কপি করুন", 3500);
+</script>
+</body>
+</html>
